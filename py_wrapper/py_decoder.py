@@ -85,21 +85,45 @@ class UFDecoder:
                                            ctypes.c_void_p(self.nn_qbt.ctypes.data), ctypes.c_void_p(self.nn_syndr.ctypes.data), ctypes.c_void_p(self.len_nb.ctypes.data),
                                            ctypes.c_void_p(a_syndrome.ctypes.data), ctypes.c_void_p(a_erasure.ctypes.data), ctypes.c_void_p(self.correction.ctypes.data), ctypes.c_int(nrep))
 
-    def ldpc_decode(self, a_syndrome, a_erasure, max_clusters=100):
-        # gemini additions for cluster size tracking
+    def ldpc_decode(self, a_syndrome, a_erasure, max_clusters=1000):
+        """
+        Decodes a single shot and returns:
+          - A list of valid cluster sizes
+          - A dictionary mapping cluster index IDs to specific qubit identity lists
+        """
+        # Pre-allocate reference numpy arrays for memory mapping
         cluster_sizes_out = np.zeros(max_clusters, dtype=np.int32)
         cluster_count_out = np.zeros(1, dtype=np.int32)
+        qubit_cluster_map_out = np.zeros(self.n_qbt, dtype=np.int32) # NEW: qubit mapping buffer
 
-        self.decode_lib.ldpc_collect_graph_and_decode(ctypes.c_int(self.n_qbt), ctypes.c_int(self.n_syndr), ctypes.c_uint8(self.num_nb_max_qbt), ctypes.c_uint8(self.num_nb_max_syndr),
-                                           ctypes.c_void_p(self.nn_qbt.ctypes.data), ctypes.c_void_p(self.nn_syndr.ctypes.data), ctypes.c_void_p(self.len_nb.ctypes.data),
-                                           ctypes.c_void_p(a_syndrome.ctypes.data), ctypes.c_void_p(a_erasure.ctypes.data), ctypes.c_void_p(self.correction.ctypes.data),
-                                           ctypes.c_void_p(cluster_sizes_out.ctypes.data),  # NEW ARGUMENT
-                                           ctypes.c_void_p(cluster_count_out.ctypes.data)   # NEW ARGUMENT
-                                            )
-        # Extract only the recorded entries filled by the C backend - gemini addition (including the return block)
+        # Call C shared object with the additional parameter (Argument 13)
+        self.decode_lib.ldpc_collect_graph_and_decode(
+            ctypes.c_int(self.n_qbt), 
+            ctypes.c_int(self.n_syndr), 
+            ctypes.c_uint8(self.num_nb_max_qbt), 
+            ctypes.c_uint8(self.num_nb_max_syndr),
+            ctypes.c_void_p(self.nn_qbt.ctypes.data), 
+            ctypes.c_void_p(self.nn_syndr.ctypes.data), 
+            ctypes.c_void_p(self.len_nb.ctypes.data),
+            ctypes.c_void_p(a_syndrome.ctypes.data), 
+            ctypes.c_void_p(a_erasure.ctypes.data), 
+            ctypes.c_void_p(self.correction.ctypes.data),
+            ctypes.c_void_p(cluster_sizes_out.ctypes.data),  
+            ctypes.c_void_p(cluster_count_out.ctypes.data),
+            ctypes.c_void_p(qubit_cluster_map_out.ctypes.data) # NEW POINTER PASSED DOWN
+        )
+
         actual_count = cluster_count_out[0]
         final_sizes = cluster_sizes_out[:actual_count].tolist()
-        return final_sizes
+
+        # Parse the flat qubit cluster map into structured lists group entries
+        cluster_to_qubits_dict = {}
+        for c_idx in range(1, actual_count + 1):
+            # Locate all data qubit positions belonging to cluster identifier c_idx
+            matching_qubit_ids = np.where(qubit_cluster_map_out == c_idx)[0].tolist()
+            cluster_to_qubits_dict[c_idx - 1] = matching_qubit_ids
+
+        return final_sizes, cluster_to_qubits_dict
 
     def ldpc_decode_batch(self, a_syndrome, a_erasure, nrep, max_clusters_per_rep=100):
         # Pre-allocate flattened array to handle the batch structure safely
