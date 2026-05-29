@@ -126,26 +126,56 @@ class UFDecoder:
         return final_sizes, cluster_to_qubits_dict
 
     def ldpc_decode_batch(self, a_syndrome, a_erasure, nrep, max_clusters_per_rep=100):
-        # Pre-allocate flattened array to handle the batch structure safely
+        """
+        Decodes a batch of noise repetitions and returns a list of tuples:
+          [(shot_0_sizes, shot_0_membership_dict), (shot_1_sizes, shot_1_membership_dict), ...]
+        """
+        # Pre-allocate flat contiguous memory spaces for ctypes tracking
         cluster_sizes_out = np.zeros(nrep * max_clusters_per_rep, dtype=np.int32)
         cluster_counts_out = np.zeros(nrep, dtype=np.int32)
+        qubit_maps_out = np.zeros(nrep * self.n_qbt, dtype=np.int32) # Matrix map matrix buffer
 
-        self.decode_lib.ldpc_collect_graph_and_decode_batch(ctypes.c_int(self.n_qbt), ctypes.c_int(self.n_syndr), ctypes.c_uint8(self.num_nb_max_qbt), ctypes.c_uint8(self.num_nb_max_syndr),
-                                           ctypes.c_void_p(self.nn_qbt.ctypes.data), ctypes.c_void_p(self.nn_syndr.ctypes.data), ctypes.c_void_p(self.len_nb.ctypes.data),
-                                           ctypes.c_void_p(a_syndrome.ctypes.data), ctypes.c_void_p(a_erasure.ctypes.data), ctypes.c_void_p(self.correction.ctypes.data), ctypes.c_int(nrep),
-                                           ctypes.c_void_p(cluster_sizes_out.ctypes.data),        # NEW ARGUMENT
-                                            ctypes.c_void_p(cluster_counts_out.ctypes.data),       # NEW ARGUMENT
-                                            ctypes.c_int(max_clusters_per_rep)                     # NEW ARGUMENT
-                                           )
-        # Unpack the flattened output matrix back into a structured Python layout
-        batch_sizes = []
+        # Execute C binary matching the expanded signature parameters (Argument 15)
+        self.decode_lib.ldpc_collect_graph_and_decode_batch(
+            ctypes.c_int(self.n_qbt), 
+            ctypes.c_int(self.n_syndr), 
+            ctypes.c_uint8(self.num_nb_max_qbt), 
+            ctypes.c_uint8(self.num_nb_max_syndr),
+            ctypes.c_void_p(self.nn_qbt.ctypes.data), 
+            ctypes.c_void_p(self.nn_syndr.ctypes.data), 
+            ctypes.c_void_p(self.len_nb.ctypes.data),
+            ctypes.c_void_p(a_syndrome.ctypes.data), 
+            ctypes.c_void_p(a_erasure.ctypes.data), 
+            ctypes.c_void_p(self.correction.ctypes.data), 
+            ctypes.c_int(nrep),
+            ctypes.c_void_p(cluster_sizes_out.ctypes.data),        
+            ctypes.c_void_p(cluster_counts_out.ctypes.data),       
+            ctypes.c_int(max_clusters_per_rep),
+            ctypes.c_void_p(qubit_maps_out.ctypes.data) # NEW: Passed matrix handle block pointer
+        )
+
+        # Re-pack the flat contiguous output tracking matrices into Python structures
+        batch_results = []
         for r in range(nrep):
             count = cluster_counts_out[r]
-            start_idx = r * max_clusters_per_rep
-            shot_sizes = cluster_sizes_out[start_idx:start_idx + count].tolist()
-            batch_sizes.append(shot_sizes)
+            
+            # Slice the sizes list for this specific repetition block
+            size_start = r * max_clusters_per_rep
+            shot_sizes = cluster_sizes_out[size_start:size_start + count].tolist()
+            
+            # Slice the flat map tracking segment matching this current shot's qubit region
+            map_start = r * self.n_qbt
+            shot_qubit_map = qubit_maps_out[map_start:map_start + self.n_qbt]
+            
+            # Group specific qubit indices into clean cluster lists matching their IDs
+            shot_membership = {}
+            for c_id in range(1, count + 1):
+                matching_ids = np.where(shot_qubit_map == c_id)[0].tolist()
+                shot_membership[c_id - 1] = matching_ids
+                
+            batch_results.append((shot_sizes, shot_membership))
 
-        return batch_sizes
+        return batch_results
 
 if __name__ == '__main__':
     import matplotlib.pyplot as plt
