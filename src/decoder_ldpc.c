@@ -452,7 +452,7 @@ void ldpc_collect_graph_and_decode(int n_qbt, int n_syndr, uint8_t num_nb_max_qb
 }
 
 /* given graph and syndrome, compute decoding in batches of nrep repetitions (for general ldpc code) */
-void ldpc_collect_graph_and_decode_batch(int n_qbt, int n_syndr, uint8_t num_nb_max_qbt, uint8_t num_nb_max_syndr, int* nn_qbt, int* nn_syndr, uint8_t* len_nb, bool* syndrome, bool* erasure, bool* decode, int nrep, int* py_cluster_sizes, int* py_cluster_counts, int max_clusters_per_rep){
+void ldpc_collect_graph_and_decode_batch(int n_qbt, int n_syndr, uint8_t num_nb_max_qbt, uint8_t num_nb_max_syndr, int* nn_qbt, int* nn_syndr, uint8_t* len_nb, bool* syndrome, bool* erasure, bool* decode, int nrep, int* py_cluster_sizes, int* py_cluster_counts, int max_clusters_per_rep, int* py_qubit_cluster_maps){
   Graph g;
   g.n_qbt = n_qbt;
   g.n_syndr = n_syndr;
@@ -465,6 +465,9 @@ void ldpc_collect_graph_and_decode_batch(int n_qbt, int n_syndr, uint8_t num_nb_
   g.num_nb_max_syndr = num_nb_max_syndr; 
   g.visited = malloc((n_qbt + n_syndr) * sizeof(bool)); 
   g.parity = malloc((n_qbt + n_syndr) * sizeof(bool)); 
+
+  int nnode = n_qbt + n_syndr;
+  int* root_to_cluster_id = malloc(nnode * sizeof(int));
 
   for(int r=0; r<nrep; r++){
     g.syndrome = syndrome + r*g.n_syndr;
@@ -480,8 +483,40 @@ void ldpc_collect_graph_and_decode_batch(int n_qbt, int n_syndr, uint8_t num_nb_
     int num_syndrome = 0;
     for(int i=0; i<g.n_syndr; i++) if(g.syndrome[i]) num_syndrome++;
 
+    // Clear tracking memory for this specific repetition run
+    for(int i = 0; i < nnode; i++) root_to_cluster_id[i] = 0;
+
     ldpc_syndrome_validation_and_decode(&g, num_syndrome);
 
+    // Map tree pointers to distinct 1-based index locations
+    int int_cluster_id = 1;
+    if (g.cluster_sizes != NULL) {
+      // Re-scan roots inside the graph state to associate IDs cleanly
+      for (int i = 0; i < nnode; i++) {
+        if (g.ptr[i] < 0) {
+          bool is_real_cluster = false;
+          for (int j = 0; j < nnode; j++) {
+            if (findroot(&g, j) == i && g.visited[j]) {
+              is_real_cluster = true;
+              break; 
+            }
+          }
+          if (is_real_cluster && g.num_qbt[i] > 0) {
+            root_to_cluster_id[i] = int_cluster_id;
+            int_cluster_id++;
+          }
+        }
+      }
+    }
+
+    // Export the qubit map values into this shot's block offset
+    int shot_offset = r * n_qbt;
+    for (int q = 0; q < n_qbt; q++) {
+      int q_root = findroot(&g, q);
+      py_qubit_cluster_maps[shot_offset + q] = root_to_cluster_id[q_root];
+    }
+
+    // Export cluster count and layout sizes for repetition step r
     py_cluster_counts[r] = g.cluster_count;
     for(int i = 0; i < g.cluster_count && i < max_clusters_per_rep; i++) {
       py_cluster_sizes[r * max_clusters_per_rep + i] = g.cluster_sizes[i];
@@ -489,6 +524,7 @@ void ldpc_collect_graph_and_decode_batch(int n_qbt, int n_syndr, uint8_t num_nb_
     free(g.cluster_sizes);
   }
 
+  free(root_to_cluster_id);
   free(g.ptr);
   free(g.num_qbt);
   free(g.visited);
