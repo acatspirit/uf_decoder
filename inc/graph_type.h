@@ -17,6 +17,11 @@ typedef struct {
   int* logical_weight;
   int n_qbt, n_syndr, num_edges, num_invalid, num_logicals;
   uint8_t num_nb_max_qbt, num_nb_max_syndr;
+
+  // gemini suggestions
+  int* cluster_sizes;      // Array to store the sizes (n_col) of decoded clusters
+  int max_cluster_count;  // Maximum capacity allocated for the cluster_sizes array
+  int cluster_count;      // Counter for how many clusters have been recorded
 } Graph;
 
 typedef struct {

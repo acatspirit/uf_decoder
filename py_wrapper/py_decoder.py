@@ -1,3 +1,6 @@
+import os
+import sys
+
 import numpy as np
 import ctypes
 import scipy
@@ -34,7 +37,21 @@ class UFDecoder:
         self.len_nb = np.zeros(self.n_syndr + self.n_qbt, dtype=np.uint8)
         self.correction = np.zeros(self.n_qbt, dtype=np.uint8)
         self.h_matrix_to_tanner_graph()
-        self.decode_lib = ctypes.cdll.LoadLibrary('../build/libSpeedDecoder.so')
+
+
+        # changed from the original path to the one in the build folder, since the .so file is generated there
+        # self.decode_lib = ctypes.cdll.LoadLibrary('../build/libSpeedDecoder.so')
+        # 1. Get the directory where py_decoder.py is located
+        _wrapper_dir = os.path.dirname(os.path.abspath(__file__))
+
+        # 2. Point to the build directory (which is now adjacent to py_wrapper/ in the root)
+        # We check for both .dylib (macOS) and .so (Linux)
+        _lib_name = "libSpeedDecoder.dylib" if sys.platform == "darwin" else "libSpeedDecoder.so"
+        _lib_path = os.path.join(os.path.dirname(_wrapper_dir), "build", _lib_name)
+
+        # 3. Load it
+        self.decode_lib = ctypes.cdll.LoadLibrary(_lib_path)
+        
 
     def add_from_h_row_and_col(self, r, c):
         self.nn_syndr[r * int(self.num_nb_max_syndr) + int(self.len_nb[r + self.n_qbt])] = c
@@ -68,16 +85,43 @@ class UFDecoder:
                                            ctypes.c_void_p(self.nn_qbt.ctypes.data), ctypes.c_void_p(self.nn_syndr.ctypes.data), ctypes.c_void_p(self.len_nb.ctypes.data),
                                            ctypes.c_void_p(a_syndrome.ctypes.data), ctypes.c_void_p(a_erasure.ctypes.data), ctypes.c_void_p(self.correction.ctypes.data), ctypes.c_int(nrep))
 
-    def ldpc_decode(self, a_syndrome, a_erasure):
+    def ldpc_decode(self, a_syndrome, a_erasure, max_clusters=100):
+        # gemini additions for cluster size tracking
+        cluster_sizes_out = np.zeros(max_clusters, dtype=np.int32)
+        cluster_count_out = np.zeros(1, dtype=np.int32)
+
         self.decode_lib.ldpc_collect_graph_and_decode(ctypes.c_int(self.n_qbt), ctypes.c_int(self.n_syndr), ctypes.c_uint8(self.num_nb_max_qbt), ctypes.c_uint8(self.num_nb_max_syndr),
                                            ctypes.c_void_p(self.nn_qbt.ctypes.data), ctypes.c_void_p(self.nn_syndr.ctypes.data), ctypes.c_void_p(self.len_nb.ctypes.data),
-                                           ctypes.c_void_p(a_syndrome.ctypes.data), ctypes.c_void_p(a_erasure.ctypes.data), ctypes.c_void_p(self.correction.ctypes.data))
+                                           ctypes.c_void_p(a_syndrome.ctypes.data), ctypes.c_void_p(a_erasure.ctypes.data), ctypes.c_void_p(self.correction.ctypes.data),
+                                           ctypes.c_void_p(cluster_sizes_out.ctypes.data),  # NEW ARGUMENT
+                                           ctypes.c_void_p(cluster_count_out.ctypes.data)   # NEW ARGUMENT
+                                            )
+        # Extract only the recorded entries filled by the C backend - gemini addition (including the return block)
+        actual_count = cluster_count_out[0]
+        final_sizes = cluster_sizes_out[:actual_count].tolist()
+        return final_sizes
 
-    def ldpc_decode_batch(self, a_syndrome, a_erasure, nrep):
+    def ldpc_decode_batch(self, a_syndrome, a_erasure, nrep, max_clusters_per_rep=100):
+        # Pre-allocate flattened array to handle the batch structure safely
+        cluster_sizes_out = np.zeros(nrep * max_clusters_per_rep, dtype=np.int32)
+        cluster_counts_out = np.zeros(nrep, dtype=np.int32)
+
         self.decode_lib.ldpc_collect_graph_and_decode_batch(ctypes.c_int(self.n_qbt), ctypes.c_int(self.n_syndr), ctypes.c_uint8(self.num_nb_max_qbt), ctypes.c_uint8(self.num_nb_max_syndr),
                                            ctypes.c_void_p(self.nn_qbt.ctypes.data), ctypes.c_void_p(self.nn_syndr.ctypes.data), ctypes.c_void_p(self.len_nb.ctypes.data),
-                                           ctypes.c_void_p(a_syndrome.ctypes.data), ctypes.c_void_p(a_erasure.ctypes.data), ctypes.c_void_p(self.correction.ctypes.data), ctypes.c_int(nrep))
+                                           ctypes.c_void_p(a_syndrome.ctypes.data), ctypes.c_void_p(a_erasure.ctypes.data), ctypes.c_void_p(self.correction.ctypes.data), ctypes.c_int(nrep),
+                                           ctypes.c_void_p(cluster_sizes_out.ctypes.data),        # NEW ARGUMENT
+                                            ctypes.c_void_p(cluster_counts_out.ctypes.data),       # NEW ARGUMENT
+                                            ctypes.c_int(max_clusters_per_rep)                     # NEW ARGUMENT
+                                           )
+        # Unpack the flattened output matrix back into a structured Python layout
+        batch_sizes = []
+        for r in range(nrep):
+            count = cluster_counts_out[r]
+            start_idx = r * max_clusters_per_rep
+            shot_sizes = cluster_sizes_out[start_idx:start_idx + count].tolist()
+            batch_sizes.append(shot_sizes)
 
+        return batch_sizes
 
 if __name__ == '__main__':
     import matplotlib.pyplot as plt

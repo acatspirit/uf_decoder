@@ -1,0 +1,6 @@
+README.md
+setup.py
+src/uf_decoder.egg-info/PKG-INFO
+src/uf_decoder.egg-info/SOURCES.txt
+src/uf_decoder.egg-info/dependency_links.txt
+src/uf_decoder.egg-info/top_level.txt
