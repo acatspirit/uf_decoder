@@ -326,6 +326,15 @@ void ldpc_syndrome_validation_and_decode(Graph* g, int num_syndromes){
           }
         }
         if (is_real_cluster && g->num_qbt[i] > 0) {
+          printf("\n--- Visualizing Cluster Root %d (Size %d) ---\n", i, g->num_qbt[i]);
+          printf("Included Data Qubit IDs: ");
+          for (int k = 0; k < g->n_qbt; k++) {
+              if (findroot(g, k) == i) {
+                  printf("%d ", k); // Prints out the IDs of the 12 qubits in the cluster
+              }
+          }
+          printf("\n----------------------------------------\n");
+
           if (g->cluster_count >= g->max_cluster_count) {
             g->max_cluster_count *= 2;
             g->cluster_sizes = realloc(g->cluster_sizes, g->max_cluster_count * sizeof(int));
