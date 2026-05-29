@@ -367,7 +367,7 @@ int check_correction_general(Graph* g){
 }
 
 /* given graph and syndrome, compute decoding for general ldpc code */
-void ldpc_collect_graph_and_decode(int n_qbt, int n_syndr, uint8_t num_nb_max_qbt, uint8_t num_nb_max_syndr, int* nn_qbt, int* nn_syndr, uint8_t* len_nb, bool* syndrome, bool* erasure, bool* decode, int* py_cluster_sizes, int* py_cluster_count){
+void ldpc_collect_graph_and_decode(int n_qbt, int n_syndr, uint8_t num_nb_max_qbt, uint8_t num_nb_max_syndr, int* nn_qbt, int* nn_syndr, uint8_t* len_nb, bool* syndrome, bool* erasure, bool* decode, int* py_cluster_sizes, int* py_cluster_count, int* py_qubit_cluster_map){
   Graph g;
   g.n_qbt = n_qbt;
   g.n_syndr = n_syndr;
@@ -393,16 +393,58 @@ void ldpc_collect_graph_and_decode(int n_qbt, int n_syndr, uint8_t num_nb_max_qb
 
   int num_syndrome = 0;
   for(int i=0; i<g.n_syndr; i++) if(syndrome[i]) num_syndrome++;
+  
   ldpc_syndrome_validation_and_decode(&g, num_syndrome);
-  printf("num_qbits: %d\n", *g.num_qbt);
 
-  // Export properties securely back to pre-allocated buffers
+  // Array to map a unique tree root index back to an exported cluster ID list position (1-indexed)
+  int* root_to_cluster_id = malloc((n_qbt + n_syndr) * sizeof(int));
+  for(int i = 0; i < (n_qbt + n_syndr); i++) root_to_cluster_id[i] = 0;
+
+  // Track and export verified non-trivial tree components
+  int int_cluster_id = 1; 
+  int nnode = n_qbt + n_syndr;
+  
+  if (g.cluster_sizes != NULL) {
+    for (int i = 0; i < nnode; i++) {
+      if (g.ptr[i] < 0) {
+        bool is_real_cluster = false;
+        for (int j = 0; j < nnode; j++) {
+          if (findroot(&g, j) == i && g.visited[j]) {
+            is_real_cluster = true;
+            break; 
+          }
+        }
+        if (is_real_cluster && g.num_qbt[i] > 0) {
+          if (g.cluster_count >= g.max_cluster_count) {
+            g.max_cluster_count *= 2;
+            g.cluster_sizes = realloc(g.cluster_sizes, g.max_cluster_count * sizeof(int));
+          }
+          g.cluster_sizes[g.cluster_count] = g.num_qbt[i];
+          
+          // Store the 1-based index location for this root node pointer
+          root_to_cluster_id[i] = int_cluster_id;
+          
+          g.cluster_count++;
+          int_cluster_id++;
+        }
+      }
+    }
+  }
+
+  // Populate python qubit mapping buffer using the structured root definitions
+  for (int q = 0; q < n_qbt; q++) {
+    int q_root = findroot(&g, q);
+    py_qubit_cluster_map[q] = root_to_cluster_id[q_root]; 
+  }
+
+  // Export metadata properties securely
   *py_cluster_count = g.cluster_count;
   for(int i = 0; i < g.cluster_count; i++) {
     py_cluster_sizes[i] = g.cluster_sizes[i];
   }
-  free(g.cluster_sizes);
 
+  free(root_to_cluster_id);
+  free(g.cluster_sizes);
   free(g.ptr);
   free(g.num_qbt);
   free(g.visited);
