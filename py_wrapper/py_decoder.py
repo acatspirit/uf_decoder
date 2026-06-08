@@ -47,7 +47,8 @@ class UFDecoder:
         # 2. Point to the build directory (which is now adjacent to py_wrapper/ in the root)
         # We check for both .dylib (macOS) and .so (Linux)
         _lib_name = "libSpeedDecoder.dylib" if sys.platform == "darwin" else "libSpeedDecoder.so"
-        _lib_path = os.path.join(os.path.dirname(_wrapper_dir), "build", _lib_name)
+        # _lib_path = os.path.join(os.path.dirname(_wrapper_dir), "build", _lib_name)
+        _lib_path = os.path.abspath(os.path.join(_wrapper_dir, "..", "build", _lib_name))
 
         # 3. Load it
         self.decode_lib = ctypes.cdll.LoadLibrary(_lib_path)
