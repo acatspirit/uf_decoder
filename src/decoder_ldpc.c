@@ -440,59 +440,57 @@ int check_correction_general(Graph* g){
 //   free(g.parity);
 // }
 
-void ldpc_collect_graph_and_decode_batch(int n_qbt, int n_syndr, uint8_t num_nb_max_qbt, uint8_t num_nb_max_syndr, int* nn_qbt, int* nn_syndr, uint8_t* len_nb, bool* syndrome, bool* erasure, bool* decode, int nrep, int* py_cluster_sizes, int* py_cluster_counts, int max_clusters_per_rep, int* py_qubit_cluster_maps){
+void ldpc_collect_graph_and_decode(int n_qbt, int n_syndr, uint8_t num_nb_max_qbt, uint8_t num_nb_max_syndr, int* nn_qbt, int* nn_syndr, uint8_t* len_nb, bool* syndrome, bool* erasure, bool* decode, int* py_cluster_sizes, int* py_cluster_count, int* py_qubit_cluster_map){
   Graph g;
   g.n_qbt = n_qbt;
   g.n_syndr = n_syndr;
   int nnode = n_qbt + n_syndr;
-  
-  // 1. Allocate main structures once
+
+  // 1. Memory Allocation
   g.ptr = malloc(nnode * sizeof(int)); 
   g.num_qbt = malloc(nnode * sizeof(int)); 
   g.visited = malloc(nnode * sizeof(bool)); 
   g.parity = malloc(nnode * sizeof(bool)); 
+  g.nn_qbt = nn_qbt; 
+  g.nn_syndr = nn_syndr; 
+  g.len_nb = len_nb; 
+  g.num_nb_max_qbt = num_nb_max_qbt; 
+  g.num_nb_max_syndr = num_nb_max_syndr; 
+  g.syndrome = syndrome;
+  g.erasure = erasure;
+  g.decode = decode; 
+
+  // Initialize graph state
+  g.max_cluster_count = 64; // Increased default buffer
+  g.cluster_sizes = malloc(g.max_cluster_count * sizeof(int));
+  g.cluster_count = 0;
+
+  for(int i = 0; i < nnode; i++) {
+      g.visited[i] = false;
+      g.ptr[i] = -1;
+      g.num_qbt[i] = (i < n_qbt) ? 1 : 0;
+  }
+
+  memset(g.parity, 0, g.n_qbt * sizeof(bool));
+  memcpy(g.parity + g.n_qbt, g.syndrome, g.n_syndr * sizeof(bool)); 
+
+  int num_syndrome = 0;
+  for(int i = 0; i < g.n_syndr; i++) if(syndrome[i]) num_syndrome++;
   
-  // 2. Allocate the look-up array here, scoped to the function
-  int* root_to_cluster_id = malloc(nnode * sizeof(int));
+  // 2. Decode
+  if (num_syndrome > 0) {
+      ldpc_syndrome_validation_and_decode(&g, num_syndrome);
+  }
 
-  for(int r=0; r<nrep; r++){
-    // Set pointers for current batch
-    g.syndrome = syndrome + r*g.n_syndr;
-    g.decode = decode + r*g.n_qbt; 
-    g.erasure = erasure + r*g.n_qbt;
-    g.nn_qbt = nn_qbt; 
-    g.nn_syndr = nn_syndr; 
-    g.len_nb = len_nb; 
-    g.num_nb_max_qbt = num_nb_max_qbt; 
-    g.num_nb_max_syndr = num_nb_max_syndr;
-
-    g.max_cluster_count = max_clusters_per_rep > 32 ? max_clusters_per_rep : 32;
-    g.cluster_sizes = malloc(g.max_cluster_count * sizeof(int));
-    g.cluster_count = 0;
-
-    // 3. SECURE INITIALIZATION: Every shot must clear these
-    for(int i = 0; i < nnode; i++) {
-        root_to_cluster_id[i] = 0;
-        g.visited[i] = false;
-        g.ptr[i] = -1;
-        g.num_qbt[i] = (i < n_qbt) ? 1 : 0;
-    }
-
-    memset(g.parity, 0, g.n_qbt * sizeof(bool));
-    memcpy(g.parity + g.n_qbt, g.syndrome, g.n_syndr * sizeof(bool)); 
-    
-    int num_syndrome = 0;
-    for(int i=0; i<g.n_syndr; i++) if(g.syndrome[i]) num_syndrome++;
-
-    if (num_syndrome > 0) {
-        ldpc_syndrome_validation_and_decode(&g, num_syndrome);
-    }
-
-    // 4. Assign cluster IDs (Strictly scoped to this repetition)
-    int int_cluster_id = 1;
+  // 3. Cluster Mapping
+  int* root_to_cluster_id = calloc(nnode, sizeof(int)); // calloc zeroes memory automatically
+  int int_cluster_id = 1; 
+  
+  if (g.cluster_sizes != NULL) {
     for (int i = 0; i < nnode; i++) {
       if (g.ptr[i] < 0) {
         bool is_real_cluster = false;
+        // Verify this is a valid cluster that was visited
         for (int j = 0; j < nnode; j++) {
           if (findroot(&g, j) == i && g.visited[j]) {
             is_real_cluster = true;
@@ -500,32 +498,32 @@ void ldpc_collect_graph_and_decode_batch(int n_qbt, int n_syndr, uint8_t num_nb_
           }
         }
         if (is_real_cluster && g.num_qbt[i] > 0) {
-          if (g.cluster_count < g.max_cluster_count) {
-            g.cluster_sizes[g.cluster_count] = g.num_qbt[i];
-            g.cluster_count++;
+          if (g.cluster_count >= g.max_cluster_count) {
+            g.max_cluster_count *= 2;
+            g.cluster_sizes = realloc(g.cluster_sizes, g.max_cluster_count * sizeof(int));
           }
+          g.cluster_sizes[g.cluster_count] = g.num_qbt[i];
           root_to_cluster_id[i] = int_cluster_id++;
+          g.cluster_count++;
         }
       }
     }
-
-    // 5. Populate maps
-    int shot_offset = r * n_qbt;
-    for (int q = 0; q < n_qbt; q++) {
-        int q_root = findroot(&g, q);
-        py_qubit_cluster_maps[shot_offset + q] = root_to_cluster_id[q_root];
-    }
-
-    py_cluster_counts[r] = g.cluster_count;
-    for(int i = 0; i < g.cluster_count && i < max_clusters_per_rep; i++) {
-      py_cluster_sizes[r * max_clusters_per_rep + i] = g.cluster_sizes[i];
-    }
-    
-    free(g.cluster_sizes); // Free per-batch allocation
   }
 
-  // 6. Final cleanup
+  // Export properties
+  for (int q = 0; q < n_qbt; q++) {
+    int q_root = findroot(&g, q);
+    py_qubit_cluster_map[q] = root_to_cluster_id[q_root]; 
+  }
+
+  *py_cluster_count = g.cluster_count;
+  for(int i = 0; i < g.cluster_count; i++) {
+    py_cluster_sizes[i] = g.cluster_sizes[i];
+  }
+
+  // 4. Cleanup
   free(root_to_cluster_id);
+  free(g.cluster_sizes);
   free(g.ptr);
   free(g.num_qbt);
   free(g.visited);
