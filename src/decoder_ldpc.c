@@ -61,7 +61,13 @@ static void idxWrite(int idx, int* hashTab, int* idxMap, int tabSize, int idxLoc
 }
 
 static int findroot(Graph* g, int i){
-  if (g->ptr[i]<0) return i;
+  // Add this safety check
+  if (i < 0 || i >= (g->n_qbt + g->n_syndr)) {
+      fprintf(stderr, "CRITICAL: findroot called with invalid node index: %d\n", i);
+      abort(); // Forces an immediate, debuggable crash
+  }
+  
+  if (g->ptr[i] < 0) return i;
   return g->ptr[i] = findroot(g, g->ptr[i]);
 }
 
