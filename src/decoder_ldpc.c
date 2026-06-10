@@ -108,7 +108,7 @@ bool ldpc_decode_cluster(Graph* g, int root){
   }
   while(bf_pos < len_lBf){
     int idxLocal = idxLookup(lBf[bf_pos], visited, globalToMat, tableSize);
-    uint8_t num_nb_max;
+    uint32_t num_nb_max; // tried changing to 32 instead of 8
     int* nn;
     int idx_arry;
     if(lBf[bf_pos] >= g->n_qbt){
@@ -122,7 +122,7 @@ bool ldpc_decode_cluster(Graph* g, int root){
       num_nb_max = g->num_nb_max_qbt;
       idx_arry = lBf[bf_pos];
     }
-    for(uint8_t i=0; i<g->len_nb[lBf[bf_pos]]; i++){
+    for(uint32_t i=0; i<g->len_nb[lBf[bf_pos]]; i++){ // try changing to 32 instead of 8
       int nb = nn[idx_arry*num_nb_max + i];
       if(findroot(g, nb) == root){
         int idxLocalNb;
@@ -241,7 +241,9 @@ void ldpc_syndrome_validation_and_decode(Graph* g, int num_syndromes){
 
   while (bf_pos < num_erasure){
     int n = bf_list[bf_pos];
+    printf("first findroot call with n=%d\n", n);
     int r_n = findroot(g, n);
+    printf("after findroot call with n=%d, r_n=%d\n", n, r_n);
     if (!g->parity[r_n]) g->num_invalid += 1;
     uint8_t num_nb_max;
     int* nn;
@@ -257,7 +259,9 @@ void ldpc_syndrome_validation_and_decode(Graph* g, int num_syndromes){
     }
     for(uint8_t i=0; i<g->len_nb[n]; i++){
       int nb = nn[idx_arry*num_nb_max + i];
+      printf("second findroot call with nb=%d\n", nb);
       int r_nb = findroot(g, nb);
+      printf("after findroot call with nb=%d, r_nb=%d\n", nb, r_nb);
       if(r_n != r_nb) r_n = merge_root(g, r_n, r_nb);
       if (g->visited[nb] == false) {
         bf_list[bf_next++] = nb;
@@ -272,17 +276,28 @@ void ldpc_syndrome_validation_and_decode(Graph* g, int num_syndromes){
 
   while(g->num_invalid > 0){
     int n = bf_list[bf_pos];
+    printf("DEBUG: num_invalid = %d, bf_pos = %d\n", g->num_invalid, bf_pos);
+    printf("Processing node %d, visited: %d\n", n, g->visited[n]);
+    printf("Degree of node %d is %d\n", n, g->len_nb[n]);
+  
+    // printf("third findroot call with n=%d\n", n);
     int r_n = findroot(g, n);
+    // printf("after findroot call with n=%d, r_n=%d\n", n, r_n);
+    printf("Cluster root %d has parity %d and num_qbt %d\n", r_n, g->parity[r_n], g->num_qbt[r_n]);
     if(g->parity[r_n]){
       for(uint8_t i=0; i<g->len_nb[n]; i++){
         int nb = g->nn_syndr[(n - g->n_qbt)*g->num_nb_max_syndr + i];
+        // printf("fourth findroot call with nb=%d\n", nb); // nb is the problem here ... happens at some point 
         int r_nb = findroot(g, nb);
+        // printf("after findroot call with nb=%d, r_nb=%d\n", nb, r_nb);
         if(r_n != r_nb){
           r_n = merge_root(g, r_n, r_nb);
           for(uint8_t j=0; j<g->len_nb[nb]; j++){
             int nb2 = g->nn_qbt[nb*g->num_nb_max_qbt + j];
+            // printf("fifth findroot call with nb2=%d\n", nb2);
             int r_nb2 = findroot(g, nb2);
-          
+            // printf("after findroot call with nb2=%d, r_nb2=%d\n", nb2, r_nb2);
+
             if (a_skipped[r_nb2] != NULL){
               nodeSk* node = a_skipped[r_nb2];
               bf_list[bf_next] = node->i_node;
@@ -319,30 +334,6 @@ void ldpc_syndrome_validation_and_decode(Graph* g, int num_syndromes){
     }
     bf_pos = (bf_pos + 1) % nnode;
   }
-
-  // // ===== TRACK BULLETPROOF SCAN =====
-  // if (g->cluster_sizes != NULL) {
-  //   for (int i = 0; i < nnode; i++) {
-  //     if (g->ptr[i] < 0) {
-  //       bool is_real_cluster = false;
-  //       for (int j = 0; j < nnode; j++) {
-  //         if (findroot(g, j) == i && g->visited[j]) {
-  //           is_real_cluster = true;
-  //           break; 
-  //         }
-  //       }
-  //       if (is_real_cluster && g->num_qbt[i] > 0) {
-  //         if (g->cluster_count >= g->max_cluster_count) {
-  //           g->max_cluster_count *= 2;
-  //           g->cluster_sizes = realloc(g->cluster_sizes, g->max_cluster_count * sizeof(int));
-  //         }
-  //         g->cluster_sizes[g->cluster_count] = g->num_qbt[i];
-  //         g->cluster_count++;
-  //       }
-  //     }
-  //   }
-  // }
-
   for(int i=0; i<nnode; i++) if (a_skipped[i] != NULL) free_nodeSk_list(a_skipped[i]);
   free(a_skipped);
   free(a_skipped_last);
@@ -455,61 +446,67 @@ void ldpc_collect_graph_and_decode(int n_qbt, int n_syndr, uint8_t num_nb_max_qb
   // 1. Memory Allocation
   g.ptr = malloc(nnode * sizeof(int)); 
   g.num_qbt = malloc(nnode * sizeof(int)); 
-  g.visited = malloc(nnode * sizeof(bool)); 
-  g.parity = malloc(nnode * sizeof(bool)); 
+  g.visited = malloc((n_qbt + n_syndr) * sizeof(bool));
+  g.parity = malloc((n_qbt + n_syndr) * sizeof(bool)); 
   g.nn_qbt = nn_qbt; 
   g.nn_syndr = nn_syndr; 
-  g.len_nb = len_nb; 
+  g.len_nb = len_nb; // why is this the problem?
   g.num_nb_max_qbt = num_nb_max_qbt; 
   g.num_nb_max_syndr = num_nb_max_syndr; 
   g.syndrome = syndrome;
   g.erasure = erasure;
   g.decode = decode; 
 
+
+  // for(int i = 0; i < nnode; i++) {
+  //     g.visited[i] = false;
+  //     g.ptr[i] = -1;
+  //     g.num_qbt[i] = (i < n_qbt) ? 1 : 0; // should I add a check here for the len_nb ?
+  // }
+
+  memset(g.parity, 0, g.n_qbt * sizeof(bool));
+  memcpy(g.parity + g.n_qbt, g.syndrome, g.n_syndr * sizeof(bool)); 
   // Initialize graph state
   g.max_cluster_count = 64; // Increased default buffer
   g.cluster_sizes = malloc(g.max_cluster_count * sizeof(int));
   g.cluster_count = 0;
-
-  for(int i = 0; i < nnode; i++) {
-      g.visited[i] = false;
-      g.ptr[i] = -1;
-      g.num_qbt[i] = (i < n_qbt) ? 1 : 0;
-  }
-
-  memset(g.parity, 0, g.n_qbt * sizeof(bool));
-  memcpy(g.parity + g.n_qbt, g.syndrome, g.n_syndr * sizeof(bool)); 
 
   int num_syndrome = 0;
   for(int i = 0; i < g.n_syndr; i++) if(syndrome[i]) num_syndrome++;
   
   // 2. Decode
   if (num_syndrome > 0) {
-      ldpc_syndrome_validation_and_decode(&g, num_syndrome);
+      ldpc_syndrome_validation_and_decode(&g, num_syndrome); // happening on these here
   }
 
   // 3. Cluster Mapping
-  int* root_to_cluster_id = calloc(nnode, sizeof(int)); // calloc zeroes memory automatically
+  // int* root_to_cluster_id = calloc(nnode, sizeof(int)); // calloc zeroes memory automatically
   int int_cluster_id = 1; 
-  
+  // findroot breaking when i=76
   if (g.cluster_sizes != NULL) {
     for (int i = 0; i < nnode; i++) {
       if (g.ptr[i] < 0) {
-        bool is_real_cluster = false;
+        // bool is_real_cluster = false;
+        bool is_real_cluster = true; // Assume true for now, since we are only counting clusters with qubits and visited nodes. 
         // Verify this is a valid cluster that was visited
-        for (int j = 0; j < nnode; j++) {
-          if (findroot(&g, j) == i && g.visited[j]) {
-            is_real_cluster = true;
-            break; 
-          }
-        }
+        // for (int j = 0; j < nnode; j++) {
+        //   if (findroot(&g, j) == i && g.visited[j]) {
+        //     is_real_cluster = true;
+        //     break; 
+        //   }
+        // }
         if (is_real_cluster && g.num_qbt[i] > 0) {
           if (g.cluster_count >= g.max_cluster_count) {
             g.max_cluster_count *= 2;
             g.cluster_sizes = realloc(g.cluster_sizes, g.max_cluster_count * sizeof(int));
           }
+          printf("Registering cluster %d with size %d qubits\n", int_cluster_id, g.num_qbt[i]);
+          printf("Current cluster count: %d\n", g.cluster_count);
+          printf("Current max cluster capacity: %d\n", g.max_cluster_count);
+          printf("Current root index: %d\n", i);
+          printf("Neighborhood size: %d\n", g.len_nb[i]);
           g.cluster_sizes[g.cluster_count] = g.num_qbt[i];
-          root_to_cluster_id[i] = int_cluster_id++;
+          // root_to_cluster_id[i] = int_cluster_id++;
           g.cluster_count++;
         }
       }
@@ -519,7 +516,7 @@ void ldpc_collect_graph_and_decode(int n_qbt, int n_syndr, uint8_t num_nb_max_qb
   // Export properties
   for (int q = 0; q < n_qbt; q++) {
     int q_root = findroot(&g, q);
-    py_qubit_cluster_map[q] = root_to_cluster_id[q_root]; 
+    // py_qubit_cluster_map[q] = root_to_cluster_id[q_root]; 
   }
 
   *py_cluster_count = g.cluster_count;
@@ -528,7 +525,7 @@ void ldpc_collect_graph_and_decode(int n_qbt, int n_syndr, uint8_t num_nb_max_qb
   }
 
   // 4. Cleanup
-  free(root_to_cluster_id);
+  // free(root_to_cluster_id);
   free(g.cluster_sizes);
   free(g.ptr);
   free(g.num_qbt);

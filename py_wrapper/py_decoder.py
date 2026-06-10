@@ -12,30 +12,32 @@ class UFDecoder:
         self.n_syndr = self.h.shape[0]  # number of parity checks
         self.n_qbt = self.h.shape[1]  # number of data qubits
         if type(h) != np.ndarray and h.getformat() == 'coo':
-            cnt = np.zeros(self.n_syndr, dtype=np.uint8)  # count number of qubits per parity check
-            cnt_qbt = np.zeros(self.n_qbt, dtype=np.uint8)  # count number of parity checks per qubit
+            cnt = np.zeros(self.n_syndr, dtype=np.uint32)  # count number of qubits per parity check
+            cnt_qbt = np.zeros(self.n_qbt, dtype=np.uint32)  # count number of parity checks per qubit
             for i in self.h.row:
                 cnt[i] += 1
             for i in self.h.col:
                 cnt_qbt[i] += 1
         elif type(h) != np.ndarray and h.getformat() == 'csr':
-            cnt = np.zeros(self.n_syndr, dtype=np.uint8)  # count number of qubits per parity check
-            cnt_qbt = np.zeros(self.n_qbt, dtype=np.uint8)  # count number of parity checks per qubit
+            cnt = np.zeros(self.n_syndr, dtype=np.uint32)  # count number of qubits per parity check
+            cnt_qbt = np.zeros(self.n_qbt, dtype=np.uint32)  # count number of parity checks per qubit
             for row in range(self.h.shape[0]):
                 cnt[row] = len(h.getrow(row).indices)
                 for c in h.getrow(row).indices:
                     cnt_qbt[c] += 1
         elif type(h) == np.ndarray:
-            cnt_qbt = np.sum(h, axis=0, dtype=np.uint8)
-            cnt = np.sum(h, axis=1, dtype=np.uint8)
+            cnt_qbt = np.sum(h, axis=0, dtype=np.uint32)
+            cnt = np.sum(h, axis=1, dtype=np.uint32)
         else:
             print('invalid parity check matrix')
         self.num_nb_max_syndr = cnt.max()  # maximum number of qubits per parity check
         self.num_nb_max_qbt = cnt_qbt.max()  # maximum number of parity checks per qubit
+        print('max number of qubits per parity check: ', self.num_nb_max_syndr)
+        print('max number of parity checks per qubit: ', self.num_nb_max_qbt)
         self.nn_syndr = np.zeros(self.n_syndr * int(self.num_nb_max_syndr), dtype=np.int32)
         self.nn_qbt = np.zeros(self.n_qbt * int(self.num_nb_max_qbt), dtype=np.int32)
-        self.len_nb = np.zeros(self.n_syndr + self.n_qbt, dtype=np.uint8)
-        self.correction = np.zeros(self.n_qbt, dtype=np.uint8)
+        self.len_nb = np.zeros(self.n_syndr + self.n_qbt, dtype=np.uint32)
+        self.correction = np.zeros(self.n_qbt, dtype=np.uint32)
         self.h_matrix_to_tanner_graph()
 
 
@@ -59,6 +61,10 @@ class UFDecoder:
         self.nn_qbt[c * int(self.num_nb_max_qbt) + int(self.len_nb[c])] = r + self.n_qbt
         self.len_nb[r + self.n_qbt] += 1
         self.len_nb[c] += 1
+        if self.len_nb[r + self.n_qbt] > self.num_nb_max_syndr:
+            print("Error: Too many neighbors for syndrome node")
+        if self.len_nb[c] > self.num_nb_max_qbt:
+            print("Error: Too many neighbors for qubit node")
 
     def h_matrix_to_tanner_graph(self):
         if type(self.h) != np.ndarray and self.h.getformat() == 'coo':
@@ -77,7 +83,14 @@ class UFDecoder:
                         self.add_from_h_row_and_col(r, c)
 
     def decode(self, a_syndrome, a_erasure):
-        self.decode_lib.collect_graph_and_decode(ctypes.c_int(self.n_qbt), ctypes.c_int(self.n_syndr), ctypes.c_uint8(self.num_nb_max_qbt), ctypes.c_uint8(self.num_nb_max_syndr),
+        # Before calling ldpc_collect_graph_and_decode
+        # Before calling the C function
+        # print("Max index in nn_qbt:", np.max(self.nn_qbt))
+        # print("Min index in nn_qbt:", np.min(self.nn_qbt))
+        assert np.all(self.nn_qbt >= 0), "Negative index found in connectivity list!"
+        assert np.all(self.nn_qbt < self.n_qbt + self.n_syndr), "Index found larger than graph size!"
+        assert np.max(self.nn_qbt) < (self.n_qbt + self.n_syndr), "Graph adjacency list contains invalid indices"
+        self.decode_lib.collect_graph_and_decode(ctypes.c_int(self.n_qbt), ctypes.c_int(self.n_syndr), ctypes.c_uint32(self.num_nb_max_qbt), ctypes.c_uint32(self.num_nb_max_syndr),
                                            ctypes.c_void_p(self.nn_qbt.ctypes.data), ctypes.c_void_p(self.nn_syndr.ctypes.data), ctypes.c_void_p(self.len_nb.ctypes.data),
                                            ctypes.c_void_p(a_syndrome.ctypes.data), ctypes.c_void_p(a_erasure.ctypes.data), ctypes.c_void_p(self.correction.ctypes.data))
 
