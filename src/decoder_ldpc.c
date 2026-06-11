@@ -389,7 +389,8 @@ void ldpc_collect_graph_and_decode(int n_qbt, int n_syndr, uint8_t num_nb_max_qb
         bool is_real_cluster = false;
         for (int j = 0; j < g.n_qbt + g.n_syndr; j++) {
           if (findroot(&g, j) == i && g.visited[j]) {
-          // if (findroot(&g, j) == i) {
+            printf("Node %d is a real cluster with root\n", i);
+            printf("Node %d has visited value: %d\n", j, g.visited[j]);
             is_real_cluster = true;
             break;
           }
