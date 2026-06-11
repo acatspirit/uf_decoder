@@ -353,7 +353,7 @@ int check_correction_general(Graph* g){
 }
 
 /* given graph and syndrome, compute decoding for general ldpc code */
-void ldpc_collect_graph_and_decode(int n_qbt, int n_syndr, uint8_t num_nb_max_qbt, uint8_t num_nb_max_syndr, int* nn_qbt, int* nn_syndr, uint8_t* len_nb, bool* syndrome, bool* erasure, bool* decode){
+void ldpc_collect_graph_and_decode(int n_qbt, int n_syndr, uint8_t num_nb_max_qbt, uint8_t num_nb_max_syndr, int* nn_qbt, int* nn_syndr, uint8_t* len_nb, bool* syndrome, bool* erasure, bool* decode, int* cluster_sizes, int* cluster_count){
   Graph g;
   g.n_qbt = n_qbt;
   g.n_syndr = n_syndr;
@@ -369,6 +369,9 @@ void ldpc_collect_graph_and_decode(int n_qbt, int n_syndr, uint8_t num_nb_max_qb
   g.erasure = erasure;
   g.parity = malloc((n_qbt + n_syndr) * sizeof(bool)); // parity of syndromes in cluster (has meaning only for root node), 0: even number of syndromes
   g.decode = decode; // decoder output
+  g.cluster_sizes = malloc(g.n_qbt * sizeof(int)); // does this make sense?
+  g.cluster_count = 0;
+
   memset(g.parity, 0, g.n_qbt * sizeof(bool));
   memcpy(g.parity + g.n_qbt, g.syndrome, g.n_syndr * sizeof(bool)); // syndrome and parity of cluster starts as the same thing (when all nodes are isolated)
 
@@ -380,6 +383,7 @@ void ldpc_collect_graph_and_decode(int n_qbt, int n_syndr, uint8_t num_nb_max_qb
   free(g.num_qbt);
   free(g.visited);
   free(g.parity);
+  free(g.cluster_sizes);
 }
 
 /* given graph and syndrome, compute decoding in batches of nrep repetitions (for general ldpc code) */

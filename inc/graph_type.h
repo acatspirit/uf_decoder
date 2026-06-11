@@ -17,6 +17,8 @@ typedef struct {
   int* logical_weight;
   int n_qbt, n_syndr, num_edges, num_invalid, num_logicals;
   uint8_t num_nb_max_qbt, num_nb_max_syndr;
+  int* cluster_sizes;
+  int cluster_count;
 } Graph;
 
 typedef struct {
