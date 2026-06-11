@@ -381,10 +381,19 @@ void ldpc_collect_graph_and_decode(int n_qbt, int n_syndr, uint8_t num_nb_max_qb
   
   // count the clusters. The cluster count is the number of negative values in the ptr array
   if (g.cluster_sizes != NULL) {
-    for (int i = 0; i < g.n_qbt + g.n_syndr; i++) { // should I make it so that it only iterates over the qubits? 
-      if (g.ptr[i] < 0) {
-        g.cluster_sizes[g.cluster_count] = g.num_qbt[i];
-        g.cluster_count++;
+    for (int i = 0; i < g.n_qbt + g.n_syndr; i++) { // should I make it so that it only iterates over the qubits? I suppose their clusters can start from data or syndrome
+      if (g.ptr[i] < 0 && g.num_qbt[i] > 0) { // check whether the node is a root of a cluster, and if it is, add its size to the cluster sizes array.
+        bool is_real_cluster = false;
+        for (int j = 0; j < g.n_qbt + g.n_syndr; j++) {
+          if (findroot(&g, j) == i && g.visited[j]) {
+            is_real_cluster = true;
+            break;
+          }
+        }
+        if (is_real_cluster) {
+          g.cluster_sizes[g.cluster_count] = g.num_qbt[i];
+          g.cluster_count++;
+        }
       }
     }
   }
