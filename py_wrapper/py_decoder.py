@@ -91,11 +91,19 @@ class UFDecoder:
                                            ctypes.c_void_p(a_syndrome.ctypes.data), ctypes.c_void_p(a_erasure.ctypes.data), ctypes.c_void_p(self.correction.ctypes.data), ctypes.c_int(nrep))
 
     def ldpc_decode(self, a_syndrome, a_erasure):
+        cluster_sizes = np.zeros(self.n_qbt, dtype=np.uint32)
+        cluster_count = np.zeros(1, dtype=np.uint32) # total number of clusters
         self.decode_lib.ldpc_collect_graph_and_decode(ctypes.c_int(self.n_qbt), ctypes.c_int(self.n_syndr), ctypes.c_uint8(self.num_nb_max_qbt), ctypes.c_uint8(self.num_nb_max_syndr),
                                            ctypes.c_void_p(self.nn_qbt.ctypes.data), ctypes.c_void_p(self.nn_syndr.ctypes.data), ctypes.c_void_p(self.len_nb.ctypes.data),
-                                           ctypes.c_void_p(a_syndrome.ctypes.data), ctypes.c_void_p(a_erasure.ctypes.data), ctypes.c_void_p(self.correction.ctypes.data))
+                                           ctypes.c_void_p(a_syndrome.ctypes.data), ctypes.c_void_p(a_erasure.ctypes.data), ctypes.c_void_p(self.correction.ctypes.data),
+                                           ctypes.c_void_p(cluster_sizes.ctypes.data), ctypes.c_void_p(cluster_count.ctypes.data))
+        final_count = cluster_count[0] 
+        final_sizes = cluster_sizes[:final_count].tolist() # get all the real clusters
+        return final_sizes
 
     def ldpc_decode_batch(self, a_syndrome, a_erasure, nrep):
+        cluster_sizes = np.zeros(self.n_qbt, dtype=np.uint32)
+        cluster_count = np.zeros(1, dtype=np.uint32)
         self.decode_lib.ldpc_collect_graph_and_decode_batch(ctypes.c_int(self.n_qbt), ctypes.c_int(self.n_syndr), ctypes.c_uint8(self.num_nb_max_qbt), ctypes.c_uint8(self.num_nb_max_syndr),
                                            ctypes.c_void_p(self.nn_qbt.ctypes.data), ctypes.c_void_p(self.nn_syndr.ctypes.data), ctypes.c_void_p(self.len_nb.ctypes.data),
                                            ctypes.c_void_p(a_syndrome.ctypes.data), ctypes.c_void_p(a_erasure.ctypes.data), ctypes.c_void_p(self.correction.ctypes.data), ctypes.c_int(nrep))
