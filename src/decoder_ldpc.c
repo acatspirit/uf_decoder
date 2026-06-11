@@ -369,7 +369,7 @@ void ldpc_collect_graph_and_decode(int n_qbt, int n_syndr, uint8_t num_nb_max_qb
   g.erasure = erasure;
   g.parity = malloc((n_qbt + n_syndr) * sizeof(bool)); // parity of syndromes in cluster (has meaning only for root node), 0: even number of syndromes
   g.decode = decode; // decoder output
-  g.cluster_sizes = malloc(g.n_qbt * sizeof(int)); // does this make sense?
+  g.cluster_sizes = malloc((g.n_qbt+ g.n_syndr) * sizeof(int)); // does this make sense? set aside cluster sizes based on maximum number of qubits
   g.cluster_count = 0;
 
   memset(g.parity, 0, g.n_qbt * sizeof(bool));
@@ -378,6 +378,8 @@ void ldpc_collect_graph_and_decode(int n_qbt, int n_syndr, uint8_t num_nb_max_qb
   int num_syndrome = 0;
   for(int i=0; i<g.n_syndr; i++) if(syndrome[i]) num_syndrome++;
   ldpc_syndrome_validation_and_decode(&g, num_syndrome);
+  *cluster_count = g.cluster_count;
+  memcpy(cluster_sizes, g.cluster_sizes, (g.n_qbt + g.n_syndr) * sizeof(int));
 
   free(g.ptr);
   free(g.num_qbt);
