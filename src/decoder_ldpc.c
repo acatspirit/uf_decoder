@@ -378,6 +378,18 @@ void ldpc_collect_graph_and_decode(int n_qbt, int n_syndr, uint8_t num_nb_max_qb
   int num_syndrome = 0;
   for(int i=0; i<g.n_syndr; i++) if(syndrome[i]) num_syndrome++;
   ldpc_syndrome_validation_and_decode(&g, num_syndrome);
+  
+  // count the clusters. The cluster count is the number of negative values in the ptr array
+  if (g.cluster_sizes != NULL) {
+    for (int i = 0; i < g.n_qbt + g.n_syndr; i++) { // should I make it so that it only iterates over the qubits? 
+      if (g.ptr[i] < 0) {
+        g.cluster_sizes[g.cluster_count] = g.num_qbt[i];
+        g.cluster_count++;
+      }
+    }
+  }
+
+  // copy the cluster sizes to the python array to get
   *cluster_count = g.cluster_count;
   memcpy(cluster_sizes, g.cluster_sizes, (g.n_qbt + g.n_syndr) * sizeof(int));
 
