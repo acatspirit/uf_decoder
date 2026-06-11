@@ -386,21 +386,9 @@ void ldpc_collect_graph_and_decode(int n_qbt, int n_syndr, uint8_t num_nb_max_qb
       printf("Node %d has ptr value: %d\n", i, g.ptr[i]);
       printf("Node %d has num_qbt value: %d\n", i, g.num_qbt[i]);
       printf("Node %d has visited value: %d\n", i, g.visited[i]);
-      if (g.ptr[i] < 0 && g.num_qbt[i] > 0 && g.visited[i]) { // check whether the node is a root of a cluster, and if it is, add its size to the cluster sizes array.
-        // bool is_real_cluster = false;
-        bool is_real_cluster = true;
-        // for (int j = 0; j < g.n_qbt + g.n_syndr; j++) {
-        //   if (findroot(&g, j) == i && g.visited[j]) {
-        //     printf("Node %d is a real cluster with root\n", i);
-        //     printf("Node %d has visited value: %d\n", j, g.visited[j]);
-        //     is_real_cluster = true;
-        //     break;
-        //   }
-        // }
-        if (is_real_cluster) {
-          g.cluster_sizes[g.cluster_count] = g.num_qbt[i];
-          g.cluster_count++;
-        }
+      if (g.ptr[i] < 0 && g.num_qbt[i] > 0 && g.visited[i]) { // negative ptr (<-1) is the - total size of cluster. defaults to -1, so when visited is true, it means the cluster is real. 
+        g.cluster_sizes[g.cluster_count] = g.num_qbt[i];
+        g.cluster_count++;
       }
     }
   }
