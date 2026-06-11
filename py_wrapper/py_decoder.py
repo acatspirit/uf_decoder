@@ -1,6 +1,37 @@
 import numpy as np
 import ctypes
 import scipy
+import sys
+import os
+import ctypes
+
+def _load_decoder_library():
+    """
+    Finds and loads the shared library based on the OS.
+    """
+    # 1. Get the directory where py_decoder.py is located
+    wrapper_dir = os.path.dirname(os.path.abspath(__file__))
+
+    # 2. Construct the path to the build directory (assuming build/ is at project root)
+    # Adjust the number of '..' as needed to go from py_wrapper/ to your project root
+    build_dir = os.path.abspath(os.path.join(wrapper_dir, "..", "build"))
+
+    # 3. Choose the correct file extension
+    ext = ".dylib" if sys.platform == "darwin" else ".so"
+    lib_path = os.path.join(build_dir, f"libSpeedDecoder{ext}")
+
+    # 4. Attempt to load
+    if not os.path.exists(lib_path):
+        raise FileNotFoundError(f"Could not find library at {lib_path}")
+        
+    return ctypes.cdll.LoadLibrary(lib_path)
+
+# Load it once at the module level
+try:
+    lib = _load_decoder_library()
+except Exception as e:
+    print(f"Warning: Could not load decoder library: {e}")
+    lib = None
 
 
 class UFDecoder:
