@@ -385,7 +385,8 @@ void ldpc_collect_graph_and_decode(int n_qbt, int n_syndr, uint8_t num_nb_max_qb
       if (g.ptr[i] < 0 && g.num_qbt[i] > 0) { // check whether the node is a root of a cluster, and if it is, add its size to the cluster sizes array.
         bool is_real_cluster = false;
         for (int j = 0; j < g.n_qbt + g.n_syndr; j++) {
-          if (findroot(&g, j) == i && g.visited[j]) {
+          // if (findroot(&g, j) == i && g.visited[j]) {
+          if (g.visited[j]) {
             is_real_cluster = true;
             break;
           }
