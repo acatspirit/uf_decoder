@@ -392,7 +392,8 @@ void ldpc_collect_graph_and_decode(int n_qbt, int n_syndr, uint8_t num_nb_max_qb
 
   // copy the cluster sizes to the python array to get
   *cluster_count = g.cluster_count;
-  memcpy(cluster_sizes, g.cluster_sizes, (g.n_qbt + g.n_syndr) * sizeof(int));
+  int copy_limit = (g.cluster_count < (g.n_qbt + g.n_syndr)) ? g.cluster_count : (g.n_qbt + g.n_syndr);
+  memcpy(cluster_sizes, g.cluster_sizes, copy_limit * sizeof(int));
 
   free(g.ptr);
   free(g.num_qbt);
