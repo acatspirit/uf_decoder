@@ -381,7 +381,7 @@ void ldpc_collect_graph_and_decode(int n_qbt, int n_syndr, uint8_t num_nb_max_qb
   
   // count the clusters. The cluster count is the number of negative values in the ptr array
   if (g.cluster_sizes != NULL) {
-    for (int i = 0; i < g.n_qbt + g.n_syndr; i++) { // should I make it so that it only iterates over the qubits? I suppose their clusters can start from data or syndrome
+    for (int i = 0; i < (n_qbt+ n_syndr); i++) { // should I make it so that it only iterates over the qubits? I suppose their clusters can start from data or syndrome
       // if (g.ptr[i] < 0 && g.num_qbt[i] > 0 && g.visited[i]) { // negative ptr (<-1) is the - total size of cluster. defaults to -1, so when visited is true, it means the cluster is real. 
       if (g.ptr[i] < -1) {
         g.cluster_sizes[g.cluster_count] = g.num_qbt[i];
@@ -392,7 +392,7 @@ void ldpc_collect_graph_and_decode(int n_qbt, int n_syndr, uint8_t num_nb_max_qb
 
   // copy the cluster sizes to the python array to get
   *cluster_count = g.cluster_count;
-  int copy_limit = (g.cluster_count < (g.n_qbt + g.n_syndr)) ? g.cluster_count : (g.n_qbt + g.n_syndr);
+  int copy_limit = (g.cluster_count < (n_qbt+ n_syndr)) ? g.cluster_count : (n_qbt+ n_syndr);
   memcpy(cluster_sizes, g.cluster_sizes, copy_limit * sizeof(int));
 
   free(g.ptr);
