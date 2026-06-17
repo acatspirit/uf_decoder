@@ -96,10 +96,16 @@ class UFDecoder:
         self.decode_lib.ldpc_collect_graph_and_decode(ctypes.c_int(self.n_qbt), ctypes.c_int(self.n_syndr), ctypes.c_uint8(self.num_nb_max_qbt), ctypes.c_uint8(self.num_nb_max_syndr),
                                            ctypes.c_void_p(self.nn_qbt.ctypes.data), ctypes.c_void_p(self.nn_syndr.ctypes.data), ctypes.c_void_p(self.len_nb.ctypes.data),
                                            ctypes.c_void_p(a_syndrome.ctypes.data), ctypes.c_void_p(a_erasure.ctypes.data), ctypes.c_void_p(self.correction.ctypes.data),
-                                           ctypes.c_void_p(cluster_sizes.ctypes.data), ctypes.c_void_p(cluster_count.ctypes.data))
+                                           ctypes.c_void_p(cluster_sizes.ctypes.data), ctypes.c_void_p(cluster_count.ctypes.data),
+                                           ctypes.c_void_p(self.qubit_cluster_map.ctypes.data))
         final_count = cluster_count[0] 
         final_sizes = cluster_sizes[:final_count].tolist() # get all the real clusters
-        return final_sizes
+
+        cluster_to_qubit_map = {}
+        for cluster_index in range(final_count):
+            qubit_indices = np.where(self.qubit_cluster_map == cluster_index)[0]
+            cluster_to_qubit_map[cluster_index] = qubit_indices.tolist()
+        return final_sizes, cluster_to_qubit_map
 
     def ldpc_decode_batch(self, a_syndrome, a_erasure, nrep):
         cluster_sizes = np.zeros(self.n_qbt, dtype=np.uint32)

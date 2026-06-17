@@ -353,7 +353,7 @@ int check_correction_general(Graph* g){
 }
 
 /* given graph and syndrome, compute decoding for general ldpc code */
-void ldpc_collect_graph_and_decode(int n_qbt, int n_syndr, uint8_t num_nb_max_qbt, uint8_t num_nb_max_syndr, int* nn_qbt, int* nn_syndr, uint8_t* len_nb, bool* syndrome, bool* erasure, bool* decode, int* cluster_sizes, int* cluster_count){
+void ldpc_collect_graph_and_decode(int n_qbt, int n_syndr, uint8_t num_nb_max_qbt, uint8_t num_nb_max_syndr, int* nn_qbt, int* nn_syndr, uint8_t* len_nb, bool* syndrome, bool* erasure, bool* decode, int* cluster_sizes, int* cluster_count, int* qubit_cluster_map){
   Graph g;
   g.n_qbt = n_qbt;
   g.n_syndr = n_syndr;
@@ -386,6 +386,7 @@ void ldpc_collect_graph_and_decode(int n_qbt, int n_syndr, uint8_t num_nb_max_qb
       // if (g.ptr[i] < 0 && g.num_qbt[i] > 0 && g.visited[i]) { // negative ptr (<-1) is the - total size of cluster. defaults to -1, so when visited is true, it means the cluster is real. 
       if (g.ptr[i] < -1) {
         g.cluster_sizes[g.cluster_count] = g.num_qbt[i];
+        root_to_cluster_id[i] = g.cluster_count;
         g.cluster_count++;
       }
     }
@@ -395,6 +396,11 @@ void ldpc_collect_graph_and_decode(int n_qbt, int n_syndr, uint8_t num_nb_max_qb
   *cluster_count = g.cluster_count;
   int copy_limit = (g.cluster_count < (n_qbt+ n_syndr)) ? g.cluster_count : (n_qbt+ n_syndr);
   memcpy(cluster_sizes, g.cluster_sizes, copy_limit * sizeof(int));
+
+  for (int q = 0; q < (n_qbt+ n_syndr); q++) {
+    int q_root = findroot(&g, q);
+    qubit_cluster_map[q] = root_to_cluster_id[q_root];
+  }
 
   free(g.ptr);
   free(g.num_qbt);
