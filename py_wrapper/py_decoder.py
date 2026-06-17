@@ -100,6 +100,7 @@ class UFDecoder:
                                            ctypes.c_void_p(cluster_sizes.ctypes.data), ctypes.c_void_p(cluster_count.ctypes.data),
                                            ctypes.c_void_p(qubit_cluster_map.ctypes.data))
         final_count = cluster_count[0] 
+        print(f"cluster map: {qubit_cluster_map}")
         print(f"Number of clusters: {final_count}")
         final_sizes = cluster_sizes[:final_count].tolist() # get all the real clusters
         

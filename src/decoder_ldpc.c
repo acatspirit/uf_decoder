@@ -397,7 +397,7 @@ void ldpc_collect_graph_and_decode(int n_qbt, int n_syndr, uint8_t num_nb_max_qb
   int copy_limit = (g.cluster_count < (n_qbt+ n_syndr)) ? g.cluster_count : (n_qbt+ n_syndr);
   memcpy(cluster_sizes, g.cluster_sizes, copy_limit * sizeof(int));
 
-  for (int q = 0; q < (n_qbt+ n_syndr); q++) {
+  for (int q = 0; q < n_qbt; q++) { // only want to include the qubits in the map
     int q_root = findroot(&g, q);
     qubit_cluster_map[q] = root_to_cluster_id[q_root];
   }
