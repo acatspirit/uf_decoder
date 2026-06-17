@@ -371,6 +371,7 @@ void ldpc_collect_graph_and_decode(int n_qbt, int n_syndr, uint8_t num_nb_max_qb
   g.decode = decode; // decoder output
   g.cluster_sizes = malloc((n_qbt+ n_syndr) * sizeof(int)); // does this make sense? set aside cluster sizes based on maximum number of qubits
   g.cluster_count = 0;
+  int* root_to_cluster_id = malloc((n_qbt + n_syndr) * sizeof(int)); // maps root nodes to their cluster IDs
 
   memset(g.parity, 0, g.n_qbt * sizeof(bool));
   memcpy(g.parity + g.n_qbt, g.syndrome, g.n_syndr * sizeof(bool)); // syndrome and parity of cluster starts as the same thing (when all nodes are isolated)
@@ -400,6 +401,7 @@ void ldpc_collect_graph_and_decode(int n_qbt, int n_syndr, uint8_t num_nb_max_qb
   free(g.visited);
   free(g.parity);
   free(g.cluster_sizes);
+  free(root_to_cluster_id);
 }
 
 /* given graph and syndrome, compute decoding in batches of nrep repetitions (for general ldpc code) */
