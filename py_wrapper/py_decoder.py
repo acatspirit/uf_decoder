@@ -100,12 +100,13 @@ class UFDecoder:
                                            ctypes.c_void_p(cluster_sizes.ctypes.data), ctypes.c_void_p(cluster_count.ctypes.data),
                                            ctypes.c_void_p(qubit_cluster_map.ctypes.data))
         final_count = cluster_count[0] 
+        print(f"Number of clusters: {final_count}")
         final_sizes = cluster_sizes[:final_count].tolist() # get all the real clusters
-
+        
         cluster_to_qubit_map = {}
-        for cluster_index in range(final_count):
+        for cluster_index in range(1, final_count + 1):
             qubit_indices = np.where(qubit_cluster_map == cluster_index)[0]
-            cluster_to_qubit_map[cluster_index] = qubit_indices.tolist()
+            cluster_to_qubit_map[cluster_index-1] = qubit_indices.tolist()
         return final_sizes, cluster_to_qubit_map
 
     def ldpc_decode_batch(self, a_syndrome, a_erasure, nrep):

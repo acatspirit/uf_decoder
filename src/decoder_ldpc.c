@@ -386,7 +386,7 @@ void ldpc_collect_graph_and_decode(int n_qbt, int n_syndr, uint8_t num_nb_max_qb
       // if (g.ptr[i] < 0 && g.num_qbt[i] > 0 && g.visited[i]) { // negative ptr (<-1) is the - total size of cluster. defaults to -1, so when visited is true, it means the cluster is real. 
       if (g.ptr[i] < -1) {
         g.cluster_sizes[g.cluster_count] = g.num_qbt[i];
-        root_to_cluster_id[i] = g.cluster_count;
+        root_to_cluster_id[i] = g.cluster_count + 1; // initialized to 0, so have to offset the cluster count by 1
         g.cluster_count++;
       }
     }
