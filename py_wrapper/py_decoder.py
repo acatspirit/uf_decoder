@@ -102,11 +102,12 @@ class UFDecoder:
         final_count = cluster_count[0] 
         final_sizes = cluster_sizes[:final_count].tolist() # get all the real clusters
         
-        cluster_to_qubit_map = {}
-        for cluster_index in range(1, final_count + 1):
-            qubit_indices = np.where(qubit_cluster_map == cluster_index)[0]
-            cluster_to_qubit_map[cluster_index-1] = qubit_indices.tolist()
-        return final_sizes, cluster_to_qubit_map
+        # cluster_to_qubit_map = {}
+        # for cluster_index in range(1, final_count + 1):
+        #     qubit_indices = np.where(qubit_cluster_map == cluster_index)[0]
+        #     cluster_to_qubit_map[cluster_index-1] = qubit_indices.tolist()
+        # return final_sizes, cluster_to_qubit_map
+        return final_sizes, qubit_cluster_map[:self.n_qbt].tolist()
 
     def ldpc_decode_batch(self, a_syndrome, a_erasure, nrep):
         cluster_sizes = np.zeros(self.n_qbt, dtype=np.uint32)
